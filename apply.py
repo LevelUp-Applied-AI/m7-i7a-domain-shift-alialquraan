@@ -31,8 +31,10 @@ def load_classifier(model_hub_id: str):
     # TODO: AutoModelForSequenceClassification.from_pretrained(model_hub_id)
     # TODO: AutoTokenizer.from_pretrained(model_hub_id)
     # TODO: return both
-    raise NotImplementedError
-
+    
+    model = AutoModelForSequenceClassification.from_pretrained(model_hub_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_hub_id)
+    return model, tokenizer
 
 def predict(text: str, model, tokenizer):
     """
@@ -48,7 +50,27 @@ def predict(text: str, model, tokenizer):
     # TODO: get argmax index and the probability at that index
     # TODO: convert the index to a label name using model.config.id2label
     # TODO: return (label_name, float(probability))
-    raise NotImplementedError
+    
+    inputs = tokenizer(
+        text,
+        truncation=True,
+        max_length=128,
+        return_tensors="pt"
+    )
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+    probs = torch.softmax(logits, dim=-1)
+
+    pred_idx = torch.argmax(probs, dim=-1).item()
+    pred_prob = probs[0][pred_idx].item()
+
+    label_name = model.config.id2label[pred_idx]
+
+    return label_name, float(pred_prob)
+    
 
 
 def apply_to_corpus(csv_path: str, model_hub_id: str, output_path: str) -> None:
@@ -65,7 +87,27 @@ def apply_to_corpus(csv_path: str, model_hub_id: str, output_path: str) -> None:
     # TODO: iterate over rows, calling predict() on the `text` column
     # TODO: build a DataFrame with the four output columns
     # TODO: write to output_path with index=False
-    raise NotImplementedError
+    
+    model, tokenizer = load_classifier(model_hub_id)
+
+    df = pd.read_csv(csv_path)
+
+    results = []
+
+    for _, row in df.iterrows():
+        text = row["text"]
+
+        label, prob = predict(text, model, tokenizer)
+
+        results.append({
+            "article_id": row["article_id"],
+            "text_excerpt": text[:200],
+            "predicted_label": label,
+            "predicted_probability": prob
+        })
+
+    out_df = pd.DataFrame(results)
+    out_df.to_csv(output_path, index=False)
 
 
 def main() -> None:
